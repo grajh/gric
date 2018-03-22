@@ -8,7 +8,7 @@ Dependencies:
 
 One example of tessellation with Gric.
 
-![alt text](https://github.com/grajh/gric/examples/Ex2.png "Example 2")
+![Example 2](https://github.com/grajh/gric/blob/master/examples/Ex2.png "Ex2.png")
 
 Beta version of the script uploaded. Documentation and examples are soon to follow.
 
