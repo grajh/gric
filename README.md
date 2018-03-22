@@ -6,7 +6,7 @@ Dependencies:
 - Matplotlib
 - [GeographicLib](https://geographiclib.sourceforge.io/1.49/python/) (optional)
 
-One example of tessellation with Gric.
+An example of tessellation with Gric.
 
 ![Example 2](https://github.com/grajh/gric/blob/master/examples/Ex2.png "Ex2.png")
 
