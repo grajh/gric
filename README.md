@@ -6,6 +6,6 @@ Dependencies:
 - Matplotlib
 - [GeographicLib](https://geographiclib.sourceforge.io/1.49/python/) (optional)
 
-The files are going to be uploaded soon!
+Script uploaded. Documentation and examples are soon to follow.
 
-Last update: 21. March 2018.
+Last update: 22. March 2018.
