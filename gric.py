@@ -69,6 +69,7 @@ class Grid(object):
         self.x_max = max(ul_crnr[0], ll_crnr[0], ur_crnr[0], lr_crnr[0])
         self.y_min = min(ul_crnr[1], ll_crnr[1], ur_crnr[1], lr_crnr[1])
         self.y_max = max(ul_crnr[1], ll_crnr[1], ur_crnr[1], lr_crnr[1])
+        self.mask_val = None
 
         lon_mid = (ul_crnr[0] + ll_crnr[0]) * 0.5
         lat_mid = (ul_crnr[1] + ll_crnr[1]) * 0.5
@@ -80,7 +81,8 @@ class Grid(object):
         lon_lat_r = np.cos(np.radians(lat_mid))
         elat_len = ecf_WGS84 / 360
 
-        # Use degree_cor=True only for grid specified in WGS84 coordinates.
+        # Use degree_cor=True only for grid specified in WGS84
+        # coordinates.
         if degree_cor == True and gl_import == True:
             lon_len = Geodesic.WGS84.Inverse(
                 lat_mid, lon_mid, lat_mid, lon_dmid)['s12']
@@ -130,12 +132,7 @@ class Grid(object):
             space_x, space_y, sparse=False, indexing='xy'
             )
 
-    def mask_array(self):
-        self.mxnds = ma.masked_array(np.copy(self.xnds))
-        self.mynds = ma.masked_array(np.copy(self.ynds))
-        self.mask_val = self.mxnds.fill_value
-
-    def slice_gridl(self, x_0, y_0, k):
+    def _slice_gridl(self, x_0, y_0, k):
         for i, row in enumerate(self.mxnds):
             y_value = self.ynds[i][0]
             x_value = x_0 + ((y_value - y_0) / (k))
@@ -151,7 +148,7 @@ class Grid(object):
             row_coords = zip(fxnds, fynds)
             self.fnds.append(row_coords)
 
-    def slice_gridm(self, x_0, y_0, k):
+    def _slice_gridm(self, x_0, y_0, k):
         for i, row in enumerate(self.mxnds):
             y_value = self.ynds[i][0]
             x_value = x_0 + ((y_value - y_0) / (k))
@@ -168,7 +165,9 @@ class Grid(object):
             self.fnds.append(row_coords)
 
     def slice_grid(self):
-        self.mask_array()
+        self.mxnds = ma.masked_array(np.copy(self.xnds))
+        self.mynds = ma.masked_array(np.copy(self.ynds))
+        self.mask_val = self.mxnds.fill_value
 
         delta_xbl = self.ll_crnr[0] - self.ul_crnr[0]
         delta_xbr = self.lr_crnr[0] - self.ur_crnr[0]
@@ -184,13 +183,13 @@ class Grid(object):
             x_0 = self.ll_crnr[0]
             y_0 = self.ll_crnr[1]
             k = delta_ylb / delta_xlb
-            self.slice_gridl(x_0, y_0, k)
+            self._slice_gridl(x_0, y_0, k)
         elif delta_ylb > 0:
             self.fnds = []
             x_0 = self.ll_crnr[0]
             y_0 = self.ll_crnr[1]
             k = delta_ylb / delta_xlb
-            self.slice_gridm(x_0, y_0, k)
+            self._slice_gridm(x_0, y_0, k)
         else:
             pass
         
@@ -199,13 +198,13 @@ class Grid(object):
             x_0 = self.ul_crnr[0]
             y_0 = self.ul_crnr[1]
             k = delta_yub / delta_xub
-            self.slice_gridm(x_0, y_0, k)
+            self._slice_gridm(x_0, y_0, k)
         elif delta_yub > 0:
             self.fnds = []
             x_0 = self.ul_crnr[0]
             y_0 = self.ul_crnr[1]
             k = delta_yub / delta_xub
-            self.slice_gridl(x_0, y_0, k)
+            self._slice_gridl(x_0, y_0, k)
         else:
             pass
 
@@ -214,7 +213,7 @@ class Grid(object):
             x_0 = self.ur_crnr[0]
             y_0 = self.ur_crnr[1]
             k = delta_ybr / delta_xbr
-            self.slice_gridm(x_0, y_0, k)
+            self._slice_gridm(x_0, y_0, k)
         else:
             pass
 
@@ -223,7 +222,7 @@ class Grid(object):
             x_0 = self.ul_crnr[0]
             y_0 = self.ul_crnr[1]
             k = delta_ybl / delta_xbl
-            self.slice_gridl(x_0, y_0, k)
+            self._slice_gridl(x_0, y_0, k)
         else:
             pass
 
@@ -262,11 +261,14 @@ class Grid(object):
             self.cell_plist.append(cell_ndslt)
             self.cell_plist.append(cell_ndsrt)
 
-        self.cell_lins_collect = LineCollection(self.cell_plist, linewidths=(0.5),
-            colors=('0.5'), linestyle='solid', alpha=1.0, zorder=10)
+        self.cell_lins_collect = LineCollection(
+            self.cell_plist, linewidths=(0.5), colors=('0.5'),
+            linestyle='solid', alpha=1.0, zorder=10
+            )
         
         return self.cell_plist, self.cell_lins_collect
 
     def add_cell(self, ul, ur, ll, lr):
         self.cell_list_mod = self.cell_list[:]
         self.cell_list_mod.append(Cell(ul, ur, ll, lr))
+        
