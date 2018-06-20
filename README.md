@@ -10,6 +10,6 @@ An example of tessellation with Gric.
 
 ![Example 2](https://github.com/grajh/gric/blob/master/examples/Ex3.png "Ex3.png")
 
-Beta version of the script uploaded. Documentation and examples are soon to follow.
+Beta version of the script uploaded. Documentation and examples are soon to follow. Improved version follows next week.
 
-Last update: 22. March 2018.
+Last update: 20. June 2018.
