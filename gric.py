@@ -2,7 +2,7 @@
 
 #**********************************************************************
 # Script name: gric.py
-# Version: 2018.03.22 !BETA VERSION!
+# Version: 2018.06.28
 # Description: Python tool for constructing a grid of irregular shape,
 # bounded by four points. Creates a masked grid out of Numpy's
 # rectangular meshgrid. Cell objects can also be constructed out of the
@@ -10,7 +10,7 @@
 #
 # Author: Gregor Rajh
 # Year: 2018
-# Python version: 2
+# Python version: 3
 # Dependencies:
 #   *geographiclib (optional)
 #   *matplotlib
@@ -26,9 +26,9 @@ import numpy.ma as ma
 try:
     from geographiclib.geodesic import Geodesic
     gl_import = True
-except ImportError, e:
+except ImportError as e:
     gl_import = False
-from matplotlib.collections import LineCollection
+from matplotlib.collections import PolyCollection
 
 
 class Cell(object):
@@ -39,19 +39,43 @@ class Cell(object):
         self.ur = ur
         self.ll = ll
         self.lr = lr
+        self.c = None
+        self.object_list = []
     
-    def contains(self, point_x, point_y):
-        ul_x = self.ul[0]
-        ul_y = self.ul[1]
-        lr_x = self.lr[0]
-        lr_y = self.lr[1]
-        if point_x >= ul_x and point_x <= lr_x:
-            if point_y >= lr_y and point_y <= ul_y:
-                return True
+    def contains(self, event_object, use_buffer=False):
+        point_x = event_object.params['LON']
+        point_y = event_object.params['LAT']
+        
+        if use_buffer is True:
+            ul_x = self.uld[0]
+            ul_y = self.uld[1]
+            lr_x = self.lrd[0]
+            lr_y = self.lrd[1]
+        else:
+            ul_x = self.ul[0]
+            ul_y = self.ul[1]
+            lr_x = self.lr[0]
+            lr_y = self.lr[1]
+
+        if point_x and point_y:
+            if point_x >= ul_x and point_x < lr_x:
+                if point_y > lr_y and point_y <= ul_y:
+                    event_object.cell = self.nds
+                    event_object.cell_ndc = self.c
+                    event_object.cell_ID = self.ID
+                    return True
+                else:
+                    return False
             else:
                 return False
         else:
-            return False
+            pass
+
+    def add_to_cell(self, in_object, use_buffer=False):
+        if self.contains(in_object, use_buffer=use_buffer) == True:
+            self.object_list.append(in_object)
+        else:
+            pass
 
 
 class Grid(object):
@@ -73,17 +97,18 @@ class Grid(object):
 
         lon_mid = (ul_crnr[0] + ll_crnr[0]) * 0.5
         lat_mid = (ul_crnr[1] + ll_crnr[1]) * 0.5
-        delta_deg = 1/10**(self.dec_placs)
+        delta_deg = 1 / float(10**(self.dec_placs))
         lon_dmid = lon_mid + delta_deg
         lat_dmid = lat_mid + delta_deg
 
         ecf_WGS84 = 2 * np.pi * 6378137.0
         lon_lat_r = np.cos(np.radians(lat_mid))
-        elat_len = ecf_WGS84 / 360
+        elat_len = ecf_WGS84 / 360.0
 
         # Use degree_cor=True only for grid specified in WGS84
         # coordinates.
-        if degree_cor == True and gl_import == True:
+        if degree_cor == True and gl_import == True \
+            and grid_spac_unit == 'deg':
             lon_len = Geodesic.WGS84.Inverse(
                 lat_mid, lon_mid, lat_mid, lon_dmid)['s12']
             lat_len = Geodesic.WGS84.Inverse(
@@ -93,7 +118,8 @@ class Grid(object):
             self.grid_spac_lon = grid_spac / lon_lat_r
             self.grid_spac_lat = grid_spac
 
-        elif degree_cor == True and gl_import == False:
+        elif degree_cor == True and gl_import == False \
+            and grid_spac_unit == 'deg':
             # Approximation for a sphere.
             self.grid_spac_lon = grid_spac / lon_lat_r
             self.grid_spac_lat = grid_spac
@@ -121,13 +147,26 @@ class Grid(object):
 
         delta_fg_x = self.x_max - self.x_min
         delta_fg_y = self.y_max - self.y_min
-        # Implement module and substract it from x_max and y_max.
+        # Implement modulus and substract it from x_max and y_max.
         nn_x = delta_fg_x / self.grid_spac_lon
         nn_y = delta_fg_y / self.grid_spac_lat
+        mod_x = delta_fg_x % self.grid_spac_lon
+        mod_y = delta_fg_y % self.grid_spac_lat
 
-        space_x = np.linspace(self.x_min, self.x_max, nn_x + 1)
-        space_y = np.linspace(self.y_max, self.y_min, nn_y + 1)
-
+        if mod_x != 0:
+            space_x = np.linspace(
+                self.x_min, self.x_max + self.grid_spac_lon - mod_x, nn_x + 2
+                )
+        else:
+            space_x = np.linspace(self.x_min, self.x_max, nn_x + 1)
+        
+        if mod_y != 0:
+            space_y = np.linspace(
+                self.y_max + self.grid_spac_lat - mod_y, self.y_min, nn_y + 2
+                )
+        else:
+            space_y = np.linspace(self.y_max, self.y_min, nn_y + 1)
+            
         self.xnds, self.ynds = np.meshgrid(
             space_x, space_y, sparse=False, indexing='xy'
             )
@@ -137,7 +176,7 @@ class Grid(object):
             y_value = self.ynds[i][0]
             x_value = x_0 + ((y_value - y_0) / (k))
             f_value = round(x_value, self.dec_placs + 1) \
-                - (self.grid_spac / 10)
+                - (self.grid_spac_lat / 10)
 
             rowm = ma.masked_where(row < f_value, row).mask
             self.mxnds[i] = ma.masked_where(rowm, self.mxnds[i])
@@ -145,7 +184,7 @@ class Grid(object):
             fxnds = ma.filled(self.mxnds[i])
             fynds = ma.filled(self.mynds[i])
 
-            row_coords = zip(fxnds, fynds)
+            row_coords = list(zip(fxnds, fynds))
             self.fnds.append(row_coords)
 
     def _slice_gridm(self, x_0, y_0, k):
@@ -153,7 +192,7 @@ class Grid(object):
             y_value = self.ynds[i][0]
             x_value = x_0 + ((y_value - y_0) / (k))
             f_value = round(x_value, self.dec_placs + 1) \
-                + (self.grid_spac / 10)
+                + (self.grid_spac_lat / 10)
 
             rowm = ma.masked_where(row > f_value, row).mask
             self.mxnds[i] = ma.masked_where(rowm, self.mxnds[i])
@@ -161,7 +200,7 @@ class Grid(object):
             fxnds = ma.filled(self.mxnds[i])
             fynds = ma.filled(self.mynds[i])
 
-            row_coords = zip(fxnds, fynds)
+            row_coords = list(zip(fxnds, fynds))
             self.fnds.append(row_coords)
 
     def slice_grid(self):
@@ -226,8 +265,9 @@ class Grid(object):
         else:
             pass
 
-    def build_cells(self):
-        self.cell_list = []            
+    def build_cells(self, buffer_frac=0.0):
+        self.cell_list = []
+        self.buffer_frac = buffer_frac
 
         for rowi, rown in enumerate(self.fnds[1:]):
             row = self.fnds[rowi]
@@ -239,34 +279,74 @@ class Grid(object):
                 nd_ll = rown[ndi]
                 nd_lr = rown[ndni]
                 cell_coords = nd_ul + nd_ur + nd_ll + nd_lr
+                nd_c_x = nd_ul[0] + (self.grid_spac_lon * 0.5)
+                nd_c_y = nd_ul[1] - (self.grid_spac_lat * 0.5)
+                nd_c = (nd_c_x, nd_c_y)
 
                 if self.mask_val not in cell_coords:
                     cell_inst = Cell(nd_ul, nd_ur, nd_ll, nd_lr)
+                    delta_buffer = self.grid_spac_lat * buffer_frac
+                    print(delta_buffer)
+                    ul_x = nd_ul[0] + delta_buffer
+                    ul_y = nd_ul[1] - delta_buffer
+                    lr_x = nd_lr[0] - delta_buffer
+                    lr_y = nd_lr[1] + delta_buffer
+                    cell_inst.uld = (ul_x, ul_y)
+                    cell_inst.urd = (lr_x, ul_y)
+                    cell_inst.lld = (ul_x, lr_y)
+                    cell_inst.lrd = (lr_x, lr_y)
+                    cell_inst.c = nd_c
+                    cell_inst.ID = "{},{}".format(rowi, ndi)
                     self.cell_list.append(cell_inst)
                 else:
                     continue
 
         return self.cell_list
 
-    def build_plot_cells(self, cell_list_in):
-        self.cell_plist = []
+    def build_plot_cells(self, cell_list_in, project_cells=False):
+        self.cell_edges = []
+        self.cell_nums_x = []
+        self.cell_nums_y = []
+        self.cell_nums = []
+
+        if project_cells == True:
+            from mpl_toolkits.basemap import Basemap
+            m = Basemap(projection='merc', resolution=None, ellps='WGS84',
+                llcrnrlon=self.x_min - self.grid_spac_lat,
+                llcrnrlat=self.y_min - self.grid_spac_lat,
+                urcrnrlon=self.x_max + self.grid_spac_lat,
+                urcrnrlat=self.y_max + self.grid_spac_lat)
+        else:
+            pass
         
         for cell in cell_list_in:
-            cell_ndsu = (cell.ul, cell.ur)
-            cell_ndsl = (cell.ll, cell.lr)
-            cell_ndslt = (cell.ul, cell.ll)
-            cell_ndsrt = (cell.ur, cell.lr)
-            self.cell_plist.append(cell_ndsu)
-            self.cell_plist.append(cell_ndsl)
-            self.cell_plist.append(cell_ndslt)
-            self.cell_plist.append(cell_ndsrt)
+            if project_cells == True:
+                cell_poly = (m(*cell.ul), m(*cell.ur), m(*cell.lr),
+                    m(*cell.ll))
+                if self.buffer_frac != 0.0:
+                    cell_polyd = (m(*cell.uld), m(*cell.urd), m(*cell.lrd),
+                        m(*cell.lld))
+                else:
+                    pass
+                cell_num_x = m(*cell.ul)[0] + (0.1 * self.grid_spac)
+                cell_num_y = m(*cell.ul)[1] - (0.1 * self.grid_spac)
+                self.cell_nums_x.append(cell_num_x)
+                self.cell_nums_y.append(cell_num_y)
+                self.cell_nums.append(cell.ID)
+            else:
+                cell_poly = (cell.ul, cell.ur, cell.lr, cell.ll)
+                if self.buffer_frac != 0.0:
+                    cell_polyd = (cell.uld, cell.urd, cell.lrd, cell.lld)
+                else:
+                    pass
+            self.cell_edges.append(cell_poly)
 
-        self.cell_lins_collect = LineCollection(
-            self.cell_plist, linewidths=(0.5), colors=('0.5'),
-            linestyle='solid', alpha=1.0, zorder=10
+        self.cell_edge_collect = PolyCollection(
+            self.cell_edges, linewidths=(0.5), edgecolors=('0.5'),
+            facecolors=('none'), linestyle='solid', alpha=1.0, zorder=3
             )
         
-        return self.cell_plist, self.cell_lins_collect
+        return self.cell_edges, self.cell_edge_collect
 
     def add_cell(self, ul, ur, ll, lr):
         self.cell_list_mod = self.cell_list[:]
